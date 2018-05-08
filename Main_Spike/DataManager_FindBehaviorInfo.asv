@@ -1,0 +1,627 @@
+function pinfo = DataManager_FindBehaviorInfo(pinfo)
+%find behavior/field-related info
+%assign following fields: 
+nspike = numel(pinfo.general.animalname);
+%nspike = 5;
+%initial assignment
+pinfo.behavior.posfile = cell(1, nspike);
+pinfo.behavior.posfrontfile = cell(1, nspike);
+pinfo.behavior.posbackfile = cell(1, nspike);
+
+
+
+%%%%%%% ATTEN: field properties are calculated on each grid (grid parameters not used here) %%%%%%%%%%%%%%%%%%%%%
+%%behavior.fielddirection = {'lefttoright', 'lefttoright', 'righttoleft', etc.} animal running direction for the fields
+%%behavior.fieldlength = length(s) in pixel of one or more fields, empty if not exist
+%%behavior.fieldcenter = field center linear coordinate, empty if not exist
+%%behavior.fieldpeak = field peak linear coordinate
+%%behavior.fieldpeakrate = peak rate for each field
+%%behavior.fieldmeanrate = mean rate for each field
+%%behavior.fieldskewindex = overall skew index during whole run session, empty if not exist
+
+%get pos file
+
+
+for (i = 1:nspike)
+
+    %pinfo.behavior.posfile{i} = [];
+
+    anm = pinfo.general.animalname{i};
+
+    dat = pinfo.general.date{i};
+
+    posdir = strcat(anm, filesep, dat, filesep, 'final', filesep, 'pos', filesep, '*.p'); %find default *.p file
+
+    if (exist(posdir) == 2)
+
+       pfile = dir(posdir);
+
+       if (~isempty(pfile))  %%choose first position file found
+
+           ppfilename = pfile(1).name;
+
+           for (kk = 1:numel(pfile))
+
+               if (~isempty(findstr(pfile(kk).name, 'dezero')))
+
+                   ppfilename = pfile(kk).name;
+
+               end
+
+           end
+
+           pinfo.behavior.posfile{i} = strcat(anm, filesep, dat, filesep, 'final', filesep, 'pos', filesep, ppfilename);
+
+       end
+
+    else
+
+       posfile = strcat(anm, filesep, dat, filesep, 'pos', filesep, '*.p');
+
+       pfile = dir(posdir);
+
+       if (~isempty(pfile))  %%choose first position file found
+
+           ppfilename = pfile(1).name;
+
+           for (kk = 1:numel(pfile))
+
+               if (~isempty(findstr(pfile(kk).name, 'dezero')))
+
+                   ppfilename = pfile(kk).name;
+
+               end
+
+           end
+
+           pinfo.behavior.posfile{i} = strcat(anm, filesep, dat, filesep, 'final', filesep, 'pos', filesep, ppfilename);
+
+       end
+
+    end
+
+end
+
+
+
+%get session time
+
+for (i = 1:nspike)
+
+%     pinfo.behavior.runstarttime{i} = [];
+
+%     pinfo.behavior.runendtime{i} = [];
+
+%     pinfo.behavior.s1starttime{i} = [];
+
+%     pinfo.behavior.s1endtime{i} = [];
+
+%     pinfo.behavior.s2starttime{i} = [];
+
+%     pinfo.behavior.s2endtime{i} = [];
+
+    anm = pinfo.general.animalname{i};
+
+    dat = pinfo.general.date{i};
+
+    finaldir = strcat(anm, filesep, dat, filesep, 'final');
+
+    if (exist(finaldir) == 7) 
+
+        workdir = finaldir;
+
+    else
+
+        workdir = strcat(anm, filesep, dat);
+
+    end
+
+    runfile = fullfile(workdir, 'run.ttb');
+
+    s1file = fullfile(workdir, 'sleep1.ttb');
+
+    s2file = fullfile(workdir, 'sleep2.ttb');
+
+    if (exist(runfile) == 2)
+
+        [st, et] = textread(runfile, '%f %f', 'delimiter', '\n', 'commentstyle', 'matlab');
+
+        pinfo.behavior.runstarttime{i} = st;
+
+        pinfo.behavior.runendtime{i} = et;
+
+    elseif ( ~isempty(pinfo.behavior.posfile{i}) ) %if no run session file found
+
+        posfile = pinfo.behavior.pofile{i};
+
+        finitpos = Header(posfile);
+
+        binarysize = DetermineBinary(posfile, finitpos);
+
+        nframe = floor(binarysize/12);
+
+        fid = fopen (posfile);
+
+        status = fseek(fid, finitpos, 'bof'); %%file indicator = binary starting position
+
+        timestamp = fread(fid, nframe, 'uint32', 8); %read one point (8,4,1), skip 8 bytes - time stamp
+
+        ok = fclose(fid);
+
+        pinfo.behavior.runstarttime{i} = timestamp(1);
+
+        pinfo.behavior.runendtime{i} = timestamp(numel(timestamp));
+
+        timestamp = [];
+
+    end
+
+    if (exist(s1file) == 2)
+
+        [st, et] = textread(s1file, '%f %f', 'delimiter', '\n', 'commentstyle', 'matlab');
+
+        pinfo.behavior.s1starttime{i} = st;
+
+        pinfo.behavior.s1endtime{i} = et;
+
+    end
+
+    if (exist(s2file) == 2)
+
+        [st, et] = textread(s2file, '%f %f', 'delimiter', '\n', 'commentstyle', 'matlab');
+
+        pinfo.behavior.s2starttime{i} = st;
+
+        pinfo.behavior.s2endtime{i} = et;
+
+    end
+
+end
+
+
+
+%%find tran, wake, SWS and REM time for s1 and s2 - read .sl file
+
+for (i = 1:nspike)
+
+%     pinfo.behavior.s1totalTran{i} = [];
+
+%     pinfo.behavior.s1totalWake{i} = [];
+
+%     pinfo.behavior.s1totalSWS{i} = [];
+
+%     pinfo.behavior.s1totalREM{i} = [];
+
+%     pinfo.behavior.s2totalTran{i} = [];
+
+%     pinfo.behavior.s2totalWake{i} = [];
+
+%     pinfo.behavior.s2totalSWS{i} = [];
+
+%     pinfo.behavior.s2totalREM{i} = [];
+
+    anm = pinfo.general.animalname{i};
+
+    dat = pinfo.general.date{i};
+
+    finaldir = strcat(anm, filesep, dat, filesep, 'final');
+
+    if (exist(finaldir) == 7) 
+
+        workdir = finaldir;
+
+    else
+
+        workdir = strcat(anm, filesep, dat);
+
+    end
+
+    scdir = strcat(workdir, filesep, 'eeg');
+
+    s1file = fullfile(scdir, 'sleep1.sl');
+
+    s2file = fullfile(scdir, 'sleep2.sl');
+
+    if (exist(s1file) == 2) %if sleep1.sl file exists
+
+        [finitpos, ntimepoint, shifttime] = readparm(s1file);
+
+        fid = fopen(s1file);  %read the file
+
+        status = fseek(fid, finitpos, 'bof');
+
+        [timestamp, count1] = fread(fid, ntimepoint, 'uint32'); %read time stamps to first column
+
+        [s1class, count2] = fread(fid, inf, 'float32'); %read power points to second column
+
+        fclose(fid);
+
+        %%0=wake, 1=tran, 2=sws, 3=rem
+
+        wakeindex = find( (s1class < 0.5) & (s1class > -0.5) );
+
+        tranindex = find( (s1class < 1.5) & (s1class > 0.5) );
+
+        SWSindex = find( (s1class < 2.5) & (s1class > 1.5) );
+
+        REMindex = find( (s1class < 3.5) & (s1class > 2.5) );
+
+        pinfo.behavior.s1totalTran{i} = numel(tranindex) * shifttime;
+
+        pinfo.behavior.s1totalWake{i} = numel(wakeindex) * shifttime;
+
+        pinfo.behavior.s1totalSWS{i} = numel(SWSindex) * shifttime;
+
+        pinfo.behavior.s1totalREM{i} = numel(REMindex) * shifttime;
+
+    end
+
+    if (exist(s2file) == 2) %if sleep1.sl file exists
+
+        [finitpos, ntimepoint, shifttime] = readparm(s2file);
+
+        fid = fopen(s2file);  %read the file
+
+        status = fseek(fid, finitpos, 'bof');
+
+        [timestamp, count1] = fread(fid, ntimepoint, 'uint32'); %read time stamps to first column
+
+        [s2class, count2] = fread(fid, inf, 'float32'); %read power points to second column
+
+        fclose(fid);
+
+        %%0=wake, 1=tran, 2=sws, 3=rem
+
+        wakeindex = find( (s2class < 0.5) & (s2class > -0.5) );
+
+        tranindex = find( (s2class < 1.5) & (s2class > 0.5) );
+
+        SWSindex = find( (s2class < 2.5) & (s2class > 1.5) );
+
+        REMindex = find( (s2class < 3.5) & (s2class > 2.5) );
+
+        pinfo.behavior.s2totalTran{i} = numel(tranindex) * shifttime;
+
+        pinfo.behavior.s2totalWake{i} = numel(wakeindex) * shifttime;
+
+        pinfo.behavior.s2totalSWS{i} = numel(SWSindex) * shifttime;
+
+        pinfo.behavior.s2totalREM{i} = numel(REMindex) * shifttime;
+
+    end
+
+end
+
+
+
+%now get field properties
+
+for (i = 1:nspike)  %require filename.runfile, behavior.posfile, search for lefttoright.ep, righttoleft.ep and lefttoright.ltr, righttoleft.ltr files
+
+    disp(strcat('-----> behav: ', pinfo.filename.clname{i}));
+
+    timeunit = pinfo.parm.timeunit(i);
+
+    zerothreshold = pinfo.parm.zerothreshold(i);
+
+    maxgap = pinfo.parm.maxgap(i);
+
+    minfieldsize = pinfo.parm.minfieldsize(i);
+
+    diodepos = pinfo.parm.diodepos{i};
+
+    minpeakrate = pinfo.parm.minpeakrate(i);
+
+    space1dbin = pinfo.parm.space1dbin(i);
+
+    basepercent = pinfo.parm.basepercent(i);
+
+%     pinfo.behavior.fielddirection{i} = [];
+
+%     pinfo.behavior.fieldlength{i} = [];
+
+%     pinfo.behavior.fieldcenter{i} = [];
+
+%     pinfo.behavior.fieldpeak{i} = [];
+
+%     pinfo.behavior.fieldpeakrate{i} = [];
+
+%     pinfo.behavior.fieldmeanrate{i} = [];
+
+%     pinfo.behavior.fieldskewindex{i} = [];
+
+    if ( (~isempty(pinfo.filename.runfile{i})) & (~isempty(pinfo.behavior.posfile{i})) )
+
+        [spiketime, b]=textread(pinfo.filename.runfile{i}, '%f %f', 'delimiter', '\n', 'commentstyle', 'matlab');   % read text data
+
+    if (~isempty(spiketime))
+
+        b = []; %read position date
+
+        [timestamp, xpos, ypos] = readpos(pinfo.behavior.posfile{i}, diodepos);
+
+        %read .ep and corresponding .ltr file
+
+        anm = pinfo.general.animalname{i};
+
+        dat = pinfo.general.date{i};
+
+        finaldir = strcat(anm, filesep, dat, filesep, 'final');
+
+        if (exist(finaldir) == 7) 
+
+            workdir = finaldir;
+
+        else
+
+            workdir = strcat(anm, filesep, dat);
+
+        end
+
+        epdir = strcat(workdir, filesep, 'eps'); ltrdir = strcat(workdir, filesep, 'pos');
+
+        numfield = 0;
+
+        linearfieldsize = []; skewindex = []; centergrid = [];
+
+        peakgrid = []; maxratevalue = []; avrate = []; rundir = []; runbaserate = [];
+
+        [numepltrfile, epfile, plfile, runway] = findepltrpair(epdir, ltrdir);
+
+        for (jj = 1:numepltrfile)
+
+            rund = []; baserate = [];
+
+            [id, ep.initial, ep.start, ep.ent, ep.final, ep.ref, ep.marker]=textread(epfile{jj}, ...
+
+                '%d %f %f %f %f %f %s', 'delimiter', '\n');   % read episode strucutre
+
+            %filter ep according to good run criterion (run length < pinfo.parm.epmaxlength)
+
+            epind = find(ep.ent-ep.start <= pinfo.parm.epmaxlength(i));
+
+            if (~isempty(epind))
+
+                ep.intial = ep.initial(epind); ep.start = ep.start(epind); ep.ent = ep.ent(epind);
+
+                ep.final = ep.final(epind); ep.ref = ep.ref(epind); ep.marker = ep.marker(epind);
+
+                [xj,yj] = textread(plfile{jj}, '%f %f', 'delimiter', '\n', 'commentstyle', 'matlab');   % read vertices
+
+                joint = [xj yj];
+
+                [nfield, linearsize, skew, center, peak, maxrate, av, baselinerate] = Manage_SpikeFieldPropEps(spiketime,...
+
+                    ep, timeunit, joint, timestamp, xpos, ypos, zerothreshold, maxgap, minfieldsize, minpeakrate, basepercent, space1dbin);
+
+                numfield = numfield + nfield; linearfieldsize = [linearfieldsize linearsize];
+
+                for (kk = 1:nfield) 
+
+                    rund{kk} = runway{jj}; 
+
+                    baserate(kk) = baselinerate;
+
+                end
+
+                skewindex = [skewindex skew]; centergrid = [centergrid center]; peakgrid = [peakgrid peak];
+
+                maxratevalue = [maxratevalue maxrate]; avrate = [avrate av]; rundir = [rundir rund]; runbaserate = [runbaserate baserate];
+
+            end
+
+        end
+
+        pinfo.behavior.fielddirection{i} = rundir;
+
+        pinfo.behavior.fieldlength{i} = linearfieldsize;
+
+        pinfo.behavior.fieldcenter{i} = centergrid;
+
+        pinfo.behavior.fieldpeak{i} = peakgrid;
+
+        pinfo.behavior.fieldpeakrate{i} = maxratevalue;
+
+        pinfo.behavior.fieldmeanrate{i} = avrate;
+
+        pinfo.behavior.fieldskewindex{i} = skewindex;
+
+        pinfo.behavior.runbaserate{i} = runbaserate;
+
+        timestamp = []; xpos = []; ypos = []; spiketime = []; runbaserate = [];
+
+    end
+
+    end
+
+end
+
+
+
+function [finitpos, ntimepoint, shifttime] = readparm(filename);
+
+%read parameters from a sleep class file
+
+fid = fopen(filename);  %first open a file for setting reading
+
+while 1               %find where header ends
+
+     tline = fgets(fid);
+
+     if (strncmpi(tline, 'Window size:', 12))
+
+         windowsize = sscanf(tline, 'Window size: %f');
+
+     elseif (strncmpi(tline, 'Shift  points:', 12))
+
+         shifttime = sscanf(tline, 'Shift points: %f');
+
+     elseif (strncmpi(tline, 'Number of timestamp points:', 20))
+
+         ntimepoint = sscanf(tline, 'Number of timestamp points: %d');
+
+     end
+
+     if (strncmpi(tline, '%%ENDHEADER', 8)) break; end
+
+end
+
+finitpos = ftell(fid);       %header end position, initial data reading position
+
+ok = fclose(fid);
+
+
+
+function [numfile, epfile, plfile, runway] = findepltrpair(epdir, pldir);
+
+%%find righttoleft.ep and/or lefttoright.ep in epdir
+
+%%find corresponding righttoleft.ltr and/or lefttoright.ltr in ltrdir
+
+%%output number of paired files (1 or 2), running direction ('lefttoright', or 'righttoleft') 
+
+epallfile = dir(fullfile(epdir, '*.ep'));
+
+plallfile = dir(fullfile(pldir, '*.ltr'));
+
+numfile = 0; epfile = []; plfile = []; runway = [];
+
+for (i = 1:numel(epallfile))
+
+    nchar = numel(epallfile(i).name);
+
+    if (nchar >= 12) %if ep file name starts with 'left', and end with 'right.ep'
+
+       if ( (strncmpi(epallfile(i).name(1:4), 'left', 4)) & (strncmpi(epallfile(i).name(nchar-7:nchar), 'right.ep', 8)) );
+
+           for (j = 1:numel(plallfile))
+
+               nch = numel(plallfile(j).name);
+
+               if (nch >= 13) %if pl file name starts with 'left', and end with 'right.ltr'
+
+                   if ( (strncmpi(plallfile(j).name(1:4), 'left', 4)) & (strncmpi(plallfile(j).name(nch-8:nch), 'right.ltr', 9)) );
+
+                       numfile = numfile + 1;
+
+                       epfile{numfile} = fullfile(epdir, epallfile(i).name);
+
+                       plfile{numfile} = fullfile(pldir, plallfile(j).name);
+
+                       runway{numfile} = 'lefttoright';
+
+                       break
+
+                   end
+
+               end
+
+           end
+
+       end
+
+   end
+
+end
+
+for (i = 1:numel(epallfile))
+
+    nchar = numel(epallfile(i).name);
+
+    if (nchar >= 12) %if ep file name starts with 'right', and end with 'left.ep'
+
+       if ( strncmpi(epallfile(i).name(1:5), 'right', 5) & (strncmpi(epallfile(i).name(nchar-6:nchar), 'left.ep', 7)) );
+
+           for (j = 1:numel(plallfile))
+
+               nch = numel(plallfile(j).name);
+
+               if (nch >= 13) %if pl file name starts with 'right', and end with 'left.ltr'
+
+                   if ( strncmpi(plallfile(j).name(1:5), 'right', 5) & (strncmpi(plallfile(j).name(nch-7:nch), 'left.ltr', 8)) );
+
+                       numfile = numfile + 1;
+
+                       epfile{numfile} = fullfile(epdir, epallfile(i).name);
+
+                       plfile{numfile} = fullfile(pldir, plallfile(j).name);
+
+                       runway{numfile} = 'righttoleft';
+
+                       break
+
+                   end
+
+               end
+
+           end
+
+       end
+
+   end
+
+end
+
+
+
+function [timestamp, xpos, ypos] = readpos(posfile, diodepos);
+
+%disp(posfile);
+
+timestamp = []; xpos = []; ypos = [];
+
+finitpos = Header(posfile);
+
+binarysize = DetermineBinary(posfile, finitpos);
+
+if (binarysize >=12 )
+
+nframe = floor(binarysize/12);
+
+fid = fopen (posfile);
+
+status = fseek(fid, finitpos, 'bof'); %%file indicator = binary starting position
+
+timestamp = fread(fid, nframe, 'uint32', 8); %read one point (8,4,1), skip 8 bytes - time stamp
+
+stattus = fseek(fid, finitpos+4, 'bof');
+
+xfront = fread(fid, nframe, 'uint16', 10); %read one point (2,2,1), skip 10 bytes - xfront
+
+stattus = fseek(fid, finitpos+6, 'bof');
+
+yfront = fread(fid, nframe, 'uint16', 10); %read one point (2,2,1), skip 10 bytes - yfront
+
+stattus = fseek(fid, finitpos+8, 'bof');
+
+xback = fread(fid, nframe, 'uint16', 10); %read one point (2,2,1), skip 10 bytes - xback
+
+stattus = fseek(fid, finitpos+10, 'bof');
+
+yback = fread(fid, nframe, 'uint16', 10); %read one point (2,2,1), skip 10 bytes - yback
+
+ok = fclose(fid);
+
+switch diodepos
+
+case 'front'
+
+   xpos = xfront;
+
+   ypos = yfront;
+
+case 'back'
+
+   xpos = xback;
+
+   ypos = yback;
+
+case 'middle'
+
+   xpos = (xfront + xback)/2;
+
+   ypos = (yfront + yback)/2;
+
+end
+
+end

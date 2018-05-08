@@ -1,0 +1,355 @@
+function DataManager_CombineSpikeDB_Callback
+%%combine multiple spike database files to a single spike database
+%%remove the repeated cells, combine cells
+%%%%%%% Attention %%%%%%%%%%%%%
+%%%%%Only cell arrays and non-empty numeric matrix assignments are allowed as entries such as:
+%%%%%  pinfo.general.celltype{i}  or   pinfo.general.fieldnumber(i)
+
+%get multiple .spikedb files
+disp('Combine spike database files');
+startpath = cd;
+[dbfile, filename, filepath, fileext, ok] = FileDlg(startpath, '.spikedb');  %get a group of database files
+
+nfile = numel(dbfile);
+
+if (nfile <= 1)
+
+    disp('-----> less than 2 spike databse files selected; action aborted');
+
+else
+
+    %read first .spikedb file structure to the final output structure
+
+    disp('-----> adding data structure');
+
+    S = load(dbfile{1}, '-mat'); %load the first file
+
+    pinfo = S.pinfo; S = []; %load the first structure to the final (pinfo) structure
+
+    %now load other files and check one by one to add to the main structure
+
+    for (i = 2:nfile)
+
+        S = load(dbfile{i}, '-mat');
+
+        nowpinfo = S.pinfo; S= [];
+
+        pinfo = CheckAndAddDB(pinfo, nowpinfo);
+
+    end
+
+    disp('-----> writing data back to a file');
+
+    [fname, pname] = uiputfile(fullfile(cd, '*.spikedb'), 'Write combined spike database to:');
+
+    writefilename = fullfile(pname, fname);
+
+    save(writefilename, 'pinfo', '-mat');
+
+end
+
+disp('**********************************');
+
+
+
+function pinfo = CheckAndAddDB(pinfo, nowpinfo);
+
+%add information in structure nowpinfo to structure pinfo
+
+%if datepath differs, just add
+
+nspike = numel(pinfo.general.animalname); nspikenow = numel(nowpinfo.general.animalname);
+
+for (i = 1:nspike)
+
+    checkstr{i} = strcat(pinfo.general.animalname{i}, pinfo.general.date{i}, pinfo.filename.clname{i});
+
+end
+
+for (i = 1:nspikenow)
+
+    checkstrnow = strcat(nowpinfo.general.animalname{i}, nowpinfo.general.date{i}, nowpinfo.filename.clname{i});
+
+    if ( isempty(find(strcmp(checkstr, checkstrnow))) ) %if the now str is not included
+
+        nspike = nspike + 1;
+
+        checkstr{nspike} = checkstrnow;
+
+        pinfo = addspike(pinfo, nowpinfo, i, nspike);
+
+    end
+
+end
+
+
+
+function pinfo = addspike(pinfo, nowpinfo, i, k);
+
+%add the i-th spike in nowpinfo to pinfo as k-th spike
+
+%%use all fields/subfields in pinfo, empty if not found in nowpinfo
+
+%%%%%get all the fields in pinfo
+
+fieldlist = fieldnames(pinfo);
+
+nfield = numel(fieldlist);
+
+for (iii = 1:nfield)
+
+    subfieldlist = [];
+
+    subfieldlist = fieldnames(pinfo.(fieldlist{iii})); %%all the subfields
+
+    for (jjj = 1:numel(subfieldlist))
+
+        if (~isfield(nowpinfo, fieldlist{iii})) %%if field unavailable
+
+            pinfo.(fieldlist{iii}).(subfieldlist{jjj}){k} = [];
+
+        elseif (~isfield(nowpinfo.(fieldlist{iii}), subfieldlist{jjj})) %%if subfield unavailable
+
+            pinfo.(fieldlist{iii}).(subfieldlist{jjj}){k} = [];
+
+        else
+
+            if (iscell(nowpinfo.(fieldlist{iii}).(subfieldlist{jjj})))
+
+               pinfo.(fieldlist{iii}).(subfieldlist{jjj}){k} = nowpinfo.(fieldlist{iii}).(subfieldlist{jjj}){i};
+
+            else
+
+               pinfo.(fieldlist{iii}).(subfieldlist{jjj})(k) = nowpinfo.(fieldlist{iii}).(subfieldlist{jjj})(i);
+
+            end
+
+        end
+
+    end
+
+end
+
+
+
+
+
+% function pinfo = addspike(pinfo, nowpinfo, i, k);
+
+% %add the i-th spike in nowpinfo to pinfo as k-th spike
+
+% %this is temporary - add entry one by one
+
+% pinfo.general.animalname{k} = nowpinfo.general.animalname{i};  %%all fields from here coming from Manage_FindAllSpike.m
+
+% pinfo.general.date{k} = nowpinfo.general.date{i};
+
+% pinfo.general.recarea{k} = nowpinfo.general.recarea{i};
+
+% pinfo.filename.clname{k} = nowpinfo.filename.clname{i};
+
+% pinfo.filename.s1file{k} = nowpinfo.filename.s1file{i};
+
+% pinfo.filename.runfile{k} = nowpinfo.filename.runfile{i};
+
+% pinfo.filename.s2file{k} = nowpinfo.filename.s2file{i};
+
+% pinfo.filename.s1parmfile{k} = nowpinfo.filename.s1parmfile{i};
+
+% pinfo.filename.runparmfile{k} = nowpinfo.filename.runparmfile{i};
+
+% pinfo.filename.s2parmfile{k} = nowpinfo.filename.s2parmfile{i};
+
+% pinfo.filename.s1wavefile{k} = nowpinfo.filename.s1wavefile{i};
+
+% pinfo.filename.runwavefile{k} = nowpinfo.filename.runwavefile{i};
+
+% pinfo.filename.s2wavefile{k} = nowpinfo.filename.s2wavefile{i};
+
+% pinfo.general.depth(k) = nowpinfo.general.depth(i); %%all fields from here coming from Manage_FindDepthGain.m
+
+% pinfo.general.gain{k} = nowpinfo.general.gain{i}; 
+
+% pinfo.parm.timeunit(k) = nowpinfo.parm.timeunit(i); %all fields from here coming from Manage_FindParm.m
+
+% pinfo.parm.fs(k) = nowpinfo.parm.fs(i);
+
+% pinfo.parm.timebinsize(i) = nowpinfo.parm.timebinsize(i);
+
+% pinfo.parm.space1dbin(k) = nowpinfo.parm.space1dbin(i);
+
+% pinfo.parm.space2dbin(k) = nowpinfo.parm.space2dbin(i);
+
+% pinfo.parm.maxgap(k) = nowpinfo.parm.maxgap(i);
+
+% pinfo.parm.zerothreshold(k) = nowpinfo.parm.zerothreshold(i);
+
+% pinfo.parm.minfieldsize(k) = nowpinfo.parm.minfieldsize(i);
+
+% pinfo.parm.minpeakrate(k) = nowpinfo.parm.minpeakrate(i);
+
+% pinfo.parm.diodepos{k} = nowpinfo.parm.diodepos{i};
+
+% pinfo.firing.runspikestarttime{k} = nowpinfo.firing.runspikestarttime{i}; %all fields from here coming from Manage_FindSpikeFiring.m
+
+% pinfo.firing.runspikeendtime{k} = nowpinfo.firing.runspikeendtime{i};
+
+% pinfo.firing.s1spikestarttime{k} = nowpinfo.firing.s1spikestarttime{i};
+
+% pinfo.firing.s1spikeendtime{k} = nowpinfo.firing.s1spikeendtime{i};
+
+% pinfo.firing.s2spikestarttime{k} = nowpinfo.firing.s2spikestarttime{i};
+
+% pinfo.firing.s2spikeendtime{k} = nowpinfo.firing.s2spikeendtime{i};
+
+% pinfo.firing.runspikenumber{k} = nowpinfo.firing.runspikenumber{i};
+
+% pinfo.firing.s1spikenumber{k} = nowpinfo.firing.s1spikenumber{i};
+
+% pinfo.firing.s2spikenumber{k} = nowpinfo.firing.s2spikenumber{i};
+
+% pinfo.firing.runmaxrate{k} = nowpinfo.firing.runmaxrate{i};
+
+% pinfo.firing.s1maxrate{k} = nowpinfo.firing.s1maxrate{i};
+
+% pinfo.firing.s2maxrate{k} = nowpinfo.firing.s2maxrate{i};
+
+% pinfo.firing.runoverallrate{k} = nowpinfo.firing.runoverallrate{i};
+
+% pinfo.firing.s1overallrate{k} = nowpinfo.firing.s1overallrate{i};
+
+% pinfo.firing.s2overallrate{k} = nowpinfo.firing.s2overallrate{i};
+
+% pinfo.firing.runcsi{k} = nowpinfo.firing.runcsi{i};
+
+% pinfo.firing.s1csi{k} = nowpinfo.firing.s1csi{i};
+
+% pinfo.firing.s2csi{k} = nowpinfo.firing.s2csi{i};
+
+% pinfo.firing.s1SWSmaxrate{k} = nowpinfo.firing.s1SWSmaxrate{i}; 
+
+% pinfo.firing.s1Tranmaxrate{k} = nowpinfo.firing.s1Tranmaxrate{i};
+
+% pinfo.firing.s1REMmaxrate{k} = nowpinfo.firing.s1REMmaxrate{i}; 
+
+% pinfo.firing.s1Wakemaxrate{k} = nowpinfo.firing.s1Wakemaxrate{i};
+
+% pinfofiring.s2SWSmaxrate{k} = nowpinfo.firing.s2SWSmaxrate{i};
+
+% pinfo.firing.s2Tranmaxrate{k} = nowpinfo.firing.s2Tranmaxrate{i};
+
+% pinfo.firing.s2REMmaxrate{k} = nowpinfo.firing.s2REMmaxrate{i}; 
+
+% pinfo.firing.s2Wakemaxrate{k} = nowpinfo.firing.s2Wakemaxrate{i};
+
+% pinfo.firing.s1SWSmeanrate{k} = nowpinfo.firing.s1SWSmeanrate{i}; 
+
+% pinfo.firing.s1Tranmeanrate{k} = nowpinfo.firing.s1Tranmeanrate{i};
+
+% pinfo.firing.s1REMmeanrate{k} = nowpinfo.firing.s1REMmeanrate{i};
+
+% pinfo.firing.s1Wakemeanrate{k} = nowpinfo.firing.s1Wakemeanrate{i};
+
+% pinfo.firing.s2SWSmeanrate{k} = nowpinfo.firing.s2SWSmeanrate{i}; 
+
+% pinfo.firing.s2Tranmeanrate{k} = nowpinfo.firing.s2Tranmeanrate{i};
+
+% pinfo.firing.s2REMmeanrate{k} = nowpinfo.firing.s2REMmeanrate{i}; 
+
+% pinfo.firing.s2Wakemeanrate{k} = nowpinfo.firing.s2Wakemeanrate{i};
+
+% pinfo.firing.s1SWScsi{k} = nowpinfo.firing.s1SWScsi{i}; 
+
+% pinfo.firing.s1Trancsi{k} = nowpinfo.firing.s1Trancsi{i};
+
+% pinfo.firing.s1REMcsi{k} = nowpinfo.firing.s1REMcsi{i}; 
+
+% pinfo.firing.s1Wakecsi{k} = nowpinfo.firing.s1Wakecsi{i};
+
+% pinfo.firing.s2SWScsi{k} = nowpinfo.firing.s2SWScsi{i}; 
+
+% pinfo.firing.s2Trancsi{k} = nowpinfo.firing.s2Trancsi{i};
+
+% pinfo.firing.s2REMcsi{k} = nowpinfo.firing.s2REMcsi{i}; 
+
+% pinfo.firing.s2Wakecsi{k} = nowpinfo.firing.s2Wakecsi{i};
+
+% pinfo.behavior.posfile{k} = nowpinfo.behavior.posfile{i};  %%all fields below come from Manage_FindBehaviorInfo.m
+
+% pinfo.behavior.runstarttime{k} = nowpinfo.behavior.runstarttime{i};
+
+% pinfo.behavior.runendtime{k} = nowpinfo.behavior.runendtime{i};
+
+% pinfo.behavior.s1starttime{k} = nowpinfo.behavior.s1starttime{i};
+
+% pinfo.behavior.s1endtime{k} = nowpinfo.behavior.s1endtime{i};
+
+% pinfo.behavior.s2starttime{k} = nowpinfo.behavior.s2starttime{i};
+
+% pinfo.behavior.s2endtime{k} = nowpinfo.behavior.s2endtime{i};
+
+% pinfo.behavior.s1totalTran{k} = nowpinfo.behavior.s1totalTran{i};
+
+% pinfo.behavior.s1totalWake{k} = nowpinfo.behavior.s1totalWake{i};
+
+% pinfo.behavior.s1totalSWS{k} = nowpinfo.behavior.s1totalSWS{i};
+
+% pinfo.behavior.s1totalREM{k} = nowpinfo.behavior.s1totalREM{i};
+
+% pinfo.behavior.s2totalTran{k} = nowpinfo.behavior.s2totalTran{i};
+
+% pinfo.behavior.s2totalWake{k} = nowpinfo.behavior.s2totalWake{i};
+
+% pinfo.behavior.s2totalSWS{k} = nowpinfo.behavior.s2totalSWS{i};
+
+% pinfo.behavior.s2totalREM{k} = nowpinfo.behavior.s2totalREM{i};
+
+% pinfo.behavior.fielddirection{k} = nowpinfo.behavior.fielddirection{i};
+
+% pinfo.behavior.fieldlength{k} = nowpinfo.behavior.fieldlength{i};
+
+% pinfo.behavior.fieldcenter{k} = nowpinfo.behavior.fieldcenter{i};
+
+% pinfo.behavior.fieldpeak{k} = nowpinfo.behavior.fieldpeak{i};
+
+% pinfo.behavior.fieldpeakrate{k} = nowpinfo.behavior.fieldpeakrate{i};
+
+% pinfo.behavior.fieldmeanrate{k} = nowpinfo.behavior.fieldmeanrate{i};
+
+% pinfo.behavior.fieldskewindex{k} = nowpinfo.behavior.fieldskewindex{i};
+
+% pinfo.waveform.s1ch1amp{k} = nowpinfo.waveform.s1ch1amp{i}; %%all fields below come from Manage_FindWaveProp.m
+
+% pinfo.waveform.s1ch2amp{k} = nowpinfo.waveform.s1ch2amp{i};
+
+% pinfo.waveform.s1ch3amp{k} = nowpinfo.waveform.s1ch3amp{i};
+
+% pinfo.waveform.s1ch4amp{k} = nowpinfo.waveform.s1ch4amp{i};
+
+% pinfo.waveform.s1maxht{k} = nowpinfo.waveform.s1maxht{i};
+
+% pinfo.waveform.s1maxwd{k} = nowpinfo.waveform.s1maxwd{i};
+
+% pinfo.waveform.runch1amp{k} = nowpinfo.waveform.runch1amp{i};
+
+% pinfo.waveform.runch2amp{k} = nowpinfo.waveform.runch2amp{i};
+
+% pinfo.waveform.runch3amp{k} = nowpinfo.waveform.runch3amp{i};
+
+% pinfo.waveform.runch4amp{k} = nowpinfo.waveform.runch4amp{i};
+
+% pinfo.waveform.runmaxht{k} = nowpinfo.waveform.runmaxht{i};
+
+% pinfo.waveform.runmaxwd{k} = nowpinfo.waveform.runmaxwd{i};
+
+% pinfo.waveform.s2ch1amp{k} = nowpinfo.waveform.s2ch1amp{i};
+
+% pinfo.waveform.s2ch2amp{k} = nowpinfo.waveform.s2ch2amp{i};
+
+% pinfo.waveform.s2ch3amp{k} = nowpinfo.waveform.s2ch3amp{i};
+
+% pinfo.waveform.s2ch4amp{k} = nowpinfo.waveform.s2ch4amp{i};
+
+% pinfo.waveform.s2maxht{k} = nowpinfo.waveform.s2maxht{i};
+
+% pinfo.waveform.s2maxwd{k} = nowpinfo.waveform.s2maxwd{i};  

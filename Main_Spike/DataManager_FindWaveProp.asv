@@ -1,0 +1,99 @@
+function [pinfo,data] = DataManager_FindWaveProp(pinfo,data, cellind)
+%%find waveform properties for each spike: channel 1,2,3,4 amplitudes, maximum height, maximum width, all average values
+%%all amplitude values in AD units (need gain to switch to mV), time values in data point (need sampling frequency to switch to second)
+
+nspike = numel(pinfo.general.animalname);  if (~isefield(pinfo, 'waveform')) pinfo.waveform = []; end
+if (~isfield(pinfo.waveform, 'champ')) pinfo.waveform.champ = cell(1,nspike); end
+if (~isfield(pinfo.waveform, 'maxwd')) pinfo.waveform.maxwd = cell(1,nspike); end
+if (~isfield(pinfo.waveform, 'maxht'))    pinfo.waveform.maxht = cell(1,nspike); end
+if (~isfield(pinfo.waveform, 'posamp'))    pinfo.waveform.posamp = cell(1,nspike_;
+    pinfo.waveform.negamp{i} = [];
+    pinfo.waveform.npampratio{i} = [];
+    pinfo.waveform.hfwd{i} = [];
+    pinfo.waveform.hlwd{i} = [];
+    pinfo.waveform.hlht{i} = [];
+    pinfo.waveform.maxposamp{i} = [];
+    pinfo.waveform.maxnegamp{i} = [];
+    pinfo.waveform.maxnpampratio{i} = [];
+    pinfo.waveform.maxhfwd{i} = [];
+    pinfo.waveform.maxhlwd{i} = [];
+    pinfo.waveform.maxhlht{i} = [];
+end
+
+for (i = 1:nspike)
+    disp(strcat('-----> wave prob ---', pinfo.general.clname{i}));
+    gain = pinfo.general.gain{i}; fs = pinfo.parm.fs(i); spikebasepoint = pinfo.parm.spikebasepoint(i);
+    if (~isempty(pinfo.general.wavefile{i}))
+        wavefile = pinfo.general.wavefile{i};
+        [spiketime, wv] = ReadSpikeWaveSPW(wavefile);
+        %%%%%spiketime in second, wv = [32, 4, nspike]
+        nspike = numel(spiketime);
+        if (nspike >0)
+           hfwd = zeros(4,1); hlwd = zeros(4,1); hlht = zeros(4,1); posamp = zeros(4,1); negamp = zeros(4,1); ampratio = zeros(4,1); 
+           %calculate average waveform
+           wvavg = sum(wv,3)/nspike;
+           for (j = 1:4)
+               [hfwd(j), hlwd(j), hlht(j), posamp(j), negamp(j), ampratio(j)] = findparam(wvavg(:,j)*gain(j), fs, spikebasepoint);
+           end
+           wvavg = []; wv = []; spiketime = [];
+           pinfo.waveform.posamp{i} = posamp;
+           pinfo.waveform.negamp{i} = negamp;
+           pinfo.waveform.npampratio{i} = ampratio;
+           pinfo.waveform.hfwd{i} = hfwd;
+           pinfo.waveform.hlwd{i} = hlwd;
+           pinfo.waveform.hlht{i} = hlht;
+           [pinfo.waveform.maxposamp{i}, ikk] = max(posamp);
+           pinfo.waveform.maxnegamp{i} = negamp(ikk);
+           pinfo.waveform.maxnpampratio{i} = ampratio(ikk);
+           pinfo.waveform.maxhfwd{i} = hfwd(ikk);
+           pinfo.waveform.maxhlwd{i} = hlwd(ikk);
+           pinfo.waveform.maxhlht{i} = hlht(ikk);
+        end
+    end
+    if (~isempty(pinfo.general.parmfile{i}))
+        %get spike parm file (pinfo.filename.parmfile{i})
+        parmfile = pinfo.general.parmfile{i};
+        S = load(parmfile, '-ascii'); %this loading method suppose not sensitive to different parameter columns
+        if (~isempty(S))
+           pinfo.waveform.champ{i} = [mean(S(:,2))*gain(1) mean(S(:,3))*gain(2) mean(S(:,4))*gain(3) mean(S(:,5))*gain(4)];
+           pinfo.waveform.maxwd{i} = mean(S(:,6))/fs;
+           pinfo.waveform.maxht{i} = mean(S(:,7))*max(gain);
+           S = [];
+        end
+    end
+end
+
+function [hfwd, hlwd, hlht, posamp, negamp, ampratio] = findparam(wvavg, fs, spikebasepoint)
+if (spikebasepoint >= 1)
+    baseline = mean(wvavg(1:spikebasepoint)); %take the first xx points as baseline
+else
+    baseline = 0;
+end
+wvavg = wvavg - baseline;
+[posamp, postime] = max(wvavg); [negamp, negtime] = min(wvavg); 
+if (posamp ~= 0) 
+    ampratio = abs(negamp/posamp); 
+else
+    ampratio = NaN;
+end
+hlht = posamp - negamp;
+hlwd = (negtime - postime)/fs; 
+
+%%%pos peak half width in s
+hfwd = NaN; hftime1 = []; hftime2 = [];
+if (negtime > postime)
+    for (i = 1:postime)
+        if (wvavg(i) >= posamp/2)
+            hftime1 = i; break
+        end 
+    end
+    for (i = postime:negtime)
+        if (wvavg(i) <= posamp/2)
+            hftime2 = i; break
+        end
+   end
+   if ((~isempty(hftime1)) && (~isempty(hftime2)))
+      hfwd = (hftime2 - hftime1)/fs;
+   end
+end
+
