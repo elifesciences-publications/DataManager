@@ -1,3 +1,8 @@
+
+
+### This code is associated with the paper from Kee et al., "Impaired spatial memory codes in a mouse model of Rett syndrome". eLife, 2018. http://dx.doi.org/10.7554/eLife.31451
+
+
 **************
 
 Program description:
